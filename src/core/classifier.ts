@@ -1,17 +1,24 @@
 import OpenAI from "openai";
 import type { Classification } from "./types";
 
-// OpenRouter is OpenAI-compatible — we point the OpenAI SDK at their base URL.
-// Verify the exact model slug in your OpenRouter dashboard under Models.
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "X-Title": "prop-mgr",
-  },
-});
-
 const MODEL = "anthropic/claude-sonnet-4-6"; // confirm slug in OpenRouter dashboard
+
+// Lazy client — instantiated on first call so missing env vars surface at
+// runtime (with a clear error) rather than crashing the Next.js build.
+let _client: OpenAI | null = null;
+function getClient(): OpenAI {
+  if (!_client) {
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY environment variable is not set");
+    }
+    _client = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.OPENROUTER_API_KEY,
+      defaultHeaders: { "X-Title": "prop-mgr" },
+    });
+  }
+  return _client;
+}
 
 const SYSTEM_PROMPT = `You are a maintenance request classifier for a residential apartment building. Analyze tenant text messages and return structured JSON.
 
@@ -39,7 +46,7 @@ EDGE CASES:
 Return ONLY the JSON object. No markdown, no explanation.`;
 
 export async function classifyMessage(message: string): Promise<Classification> {
-  const response = await client.chat.completions.create({
+  const response = await getClient().chat.completions.create({
     model: MODEL,
     max_tokens: 512,
     messages: [
